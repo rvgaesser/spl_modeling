@@ -163,6 +163,10 @@ circ_interactmod <- lm(spl_low_db ~ center_time+ (sin(2*pi*center_time/24) + cos
                        data=spl_data)
 summary(circ_interactmod)
 plot(circ_interactmod)
+
+#circ_interactmod <- gls(spl_low_db ~ center_time+ (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id,
+#                        correlation = corCAR1(~center_time|Site*Deploy), data=spl_data)
+
 ```
 
 
