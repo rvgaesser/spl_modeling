@@ -150,22 +150,53 @@ acf(df_residuals[,19], lag.max = 350, na.action = na.omit) # WESTR 5
 ## Exploring circular variables
 
 ```{r}
-# fit with lme too and look at residuals and subtract off daily cycle
-
+# GAM with circular time variable
 circ_interactmod_centered = gam(spl_low_db ~ s(center_time, by = interaction(Site,Deploy))+ 
                             (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id + Site*Deploy, data=spl_data)
 summary(circ_interactmod_centered)
 ggplot(spl_data, aes(x = center_time, y = spl_low_db))+ geom_point(alpha = .2)+
-  geom_line(aes(y = predict(circ_interactmod_centered)))+ facet_grid(Site~Deploy, scales = "free_x")
+  geom_line(aes(y = predict(circ_interactmod_centered)))+ facet_grid(Site~Deploy)
 
 
-circ_interactmod <- lm(spl_low_db ~ center_time+ (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id,
+# fit with lme too and look at residuals and subtract off daily cycle
+
+circ_interactmod <- lm(spl_low_db ~ center_time + (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id, 
                        data=spl_data)
 summary(circ_interactmod)
 plot(circ_interactmod)
+ggplot(spl_data, aes(x = center_time, y = spl_low_db))+ geom_point()+
+  geom_line(aes(y = predict(circ_interactmod)))+facet_grid(Site~Deploy)
 
-#circ_interactmod <- gls(spl_low_db ~ center_time+ (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id,
-#                        correlation = corCAR1(~center_time|Site*Deploy), data=spl_data)
+
+circ_interactmod_coAR <- gls(spl_low_db ~ center_time+ (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id,
+                        correlation = corCAR1(form = ~center_time|id), data=spl_data)
+
+# Evaluating remaining autocorrelation after accounting for daily pattern
+df_residuals_circ = data.frame(filecount = filecount, ID = spl_data$id, residuals = residuals(circ_interactmod)) %>%
+  spread(ID,residuals,fill = NA)
+par(mfrow=c(4,5))
+acf(df_residuals_circ[,2], lag.max = 350, na.action = na.omit) # 210 1
+acf(df_residuals_circ[,3], lag.max = 350, na.action = na.omit) # 210 2
+acf(df_residuals_circ[,4], lag.max = 350, na.action = na.omit) # 210 3 
+acf(df_residuals_circ[,5], lag.max = 350, na.action = na.omit) # 210 4
+acf(df_residuals_circ[,6], lag.max = 350, na.action = na.omit) # 210 5 
+plot(x = 10, y = 20)
+plot(x = 10, y = 20)
+acf(df_residuals_circ[,7], lag.max = 350, na.action = na.omit) # AEOLU 3
+acf(df_residuals_circ[,8], lag.max = 350, na.action = na.omit) # AEOLU 4
+acf(df_residuals_circ[,9], lag.max = 350, na.action = na.omit) # AEOLU 5
+acf(df_residuals_circ[,10], lag.max = 350, na.action = na.omit) # CSPAR 1
+acf(df_residuals_circ[,11], lag.max = 350, na.action = na.omit) # CSPAR 2
+acf(df_residuals_circ[,12], lag.max = 350, na.action = na.omit) # CSPAR 3
+acf(df_residuals_circ[,13], lag.max = 350, na.action = na.omit) # CSPAR 4
+acf(df_residuals_circ[,14], lag.max = 350, na.action = na.omit) # CSPAR 5
+acf(df_residuals_circ[,15], lag.max = 350, na.action = na.omit) # WESTR 1
+acf(df_residuals_circ[,16], lag.max = 350, na.action = na.omit) # WESTR 2 
+acf(df_residuals_circ[,17], lag.max = 350, na.action = na.omit) # WESTR 3
+acf(df_residuals_circ[,18], lag.max = 350, na.action = na.omit) # WESTR 4
+acf(df_residuals_circ[,19], lag.max = 350, na.action = na.omit) # WESTR 5
+
+
 
 ```
 
