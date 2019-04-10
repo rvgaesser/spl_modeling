@@ -1,0 +1,204 @@
+---
+title: "Modeling SPL"
+author: "Becca Van Hoeck"
+date: "March 21, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Packages and setwd
+
+```{r}
+setwd('C:/Users/Becca/Desktop/Soundscape_Analysis/Modeling')
+library(ggplot2)
+library(dplyr)
+library(mgcv)
+library(nlme)
+library(tidyr)
+library(circular)
+```
+
+## Read in and prepare data
+
+The response variable of interest is average sound pressure level (SPL_dB; loudness) measured in dB for each audio file. The dataframe also includes the linear values (spl_linear) so that I can summarize the data if needed without dealing with log rules. The data was subsampled to 2 minute audio files every 15 minutes, resulting in 96 files/day.The other variables included are:
+
+hrmn_edt = Hour and minute in EDT of file (values range from 0:0.25:23.75)
+year, month, day, hour, min, sec = individual columns of time of file in UTC
+Site = Recording site: either 210RK, WESTR, CSPAR, or AEOLU 
+Deploy = Possible values 1:5, 1 = Nov '15, 2 = Jan '16, 3 = Apr '16, 4 = June '16, 5 = Aug '16 
+
+This only includes the low frequency data(fish sounds), I will likely do the same thing for the high frequency data (invertebrate sounds)
+
+```{r echo=FALSE}
+spl_data = read.csv('SPL_all_data.csv', header = TRUE)
+spl_data = mutate(spl_data, Site = case_when(site == 1 ~ "210RK", site == 2 ~ "WESTR",
+                                           site == 3 ~ "CSPAR", site == 4 ~ "AEOLU"),
+                 Deploy = case_when(month == 11 ~ 1, month == 1 ~ 2, month == 4 ~ 3, 
+                                    month == 6 ~ 4, month == 8 ~ 5), 
+                 Reef_type = case_when(Site == "210RK" | Site == "WESTR" ~ "Natural",
+                                       Site == "CSPAR" | Site == "AEOLU" ~ "Artificial"))
+spl_data$id = paste(spl_data$Site,spl_data$Deploy, sep = "_")
+spl_data$Deploy = as.factor(spl_data$Deploy)
+spl_data$Site = as.factor(spl_data$Site)
+spl_data = spl_data %>% group_by(id) %>% mutate(center_time = scale(matdays, center = TRUE))
+
+```
+
+## Following GAM workflow from notes
+
+```{r}
+theme_set(theme_bw())
+SPLdB_plot = ggplot(spl_data, aes(x = hrmn_edt, y = spl_low_db))+ geom_point()
+
+# Plotting with different smoothers
+SPLdB_plot+ geom_smooth(aes(color="Span=.667"),se=F)+ geom_smooth(aes(color="Span=.95"),se=F,span=.95)+labs(color="")+
+  geom_smooth(aes(color="Span=.667, Robust Fit"),se=F,method.args=list(family="symmetric"))
+
+# Simplest GAM
+test_gam1 = gam(spl_low_db ~ s(hrmn_edt), data = spl_data)
+SPLdB_plot+ geom_line(aes(y = predict(test_gam1)))
+
+# Simple GAM, but plotting deployment and its interaction with site
+test_gam2 = gam(spl_low_db ~ s(hrmn_edt) + Deploy*Site, data = spl_data)
+ggplot(spl_data, aes(x = hrmn_edt, y = spl_low_db, color = Deploy, shape = Site))+ geom_point()+
+  geom_line(aes(y = predict(test_gam2)))+ labs(color = "Deploy", shape = "Site")
+summary(test_gam2)
+
+```
+
+## Models from meeting with James 
+
+```{r}
+# The goal is to describe the daily pattern in SPL and evaluate how it varies across site and season
+
+## Fit gams that vary in their complexity of both smoothing effects and additive effects
+spl_gam1 <- gam(spl_low_db ~ s(hrmn_edt)+ Site*Deploy, data=spl_data)
+spl_gam2 <- gam(spl_low_db ~ s(hrmn_edt, by = Deploy) + Site*Deploy, data=spl_data)
+full_addmod <- gam(spl_low_db ~ s(hrmn_edt, by = interaction(Site,Deploy)) + Site+Deploy, data=spl_data)
+full_interactmod <- gam(spl_low_db ~ s(hrmn_edt, by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
+cont_interactmod <- gam(spl_low_db ~ s(matdays, by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
+circ_interactmod <- gam(spl_low_db ~ s(sin((2*pi*matdays)/24) + cos((2*pi*matdays)/24), 
+                                       by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
+
+
+## Test for differences among nested models.
+anova(full_interactmod, full_addmod, test="Chisq")
+AIC(full_interactmod, full_addmod)
+## ANOVA suggests that we keep the most complicated model
+## The p-values are highly suspect given the likely temporal autocorrelation
+
+summary(full_interactmod)
+summary(cont_interactmod)
+summary(circ_interactmod)
+
+
+## Using ggplot for quick gam visualization
+ggplot(spl_data, aes(x=hrmn_edt, y=spl_low_db))+ 
+  geom_point(alpha = .2)+
+  geom_smooth(method="gam", formula= y~s(x))+ facet_grid(Site~Deploy)
+
+ggplot(spl_data, aes(x = hrmn_edt, y = spl_low_db))+ geom_point(alpha = .2)+
+  geom_line(aes(y = predict(full_interactmod)))+ facet_grid(Site~Deploy)
+ggplot(spl_data, aes(x=matdays, y = spl_low_db))+ geom_point(alpha = .2)+
+  geom_line(aes(y = predict(cont_interactmod)))+ facet_grid(Site~Deploy, scales = "free_x")
+
+```
+
+## Visualize and model Autocorrelation structure
+
+```{r}
+
+## Attempting acf on each site/deploy following convo with james
+filecount = as.vector(c(1:672,1:576,1:768,1:576,1:672,
+                        1:672,1:768,1:768,1:672,1:672,
+                        1:672,1:864,1:768,1:672,1:672,
+                        1:768,1:672,1:672))
+df_residuals = data.frame(filecount = filecount, ID = spl_data$id, residuals = residuals(cont_interactmod)) %>%
+  spread(ID,residuals,fill = NA)
+
+#acf_obj = apply(df_residuals[,-1],2,acf, na.action = na.omit)
+#df <- data.frame(matrix(unlist(acf_obj), nrow=length(acf_obj), byrow=T))
+#test = do.call(rbind,acf_obj)
+
+par(mfrow=c(4,5))
+acf(df_residuals[,2], lag.max = 350, na.action = na.omit) # 210 1
+acf(df_residuals[,3], lag.max = 350, na.action = na.omit) # 210 2
+acf(df_residuals[,4], lag.max = 350, na.action = na.omit) # 210 3 
+acf(df_residuals[,5], lag.max = 350, na.action = na.omit) # 210 4
+acf(df_residuals[,6], lag.max = 350, na.action = na.omit) # 210 5 
+plot(x = 10, y = 20)
+plot(x = 10, y = 20)
+acf(df_residuals[,7], lag.max = 350, na.action = na.omit) # AEOLU 3
+acf(df_residuals[,8], lag.max = 350, na.action = na.omit) # AEOLU 4
+acf(df_residuals[,9], lag.max = 350, na.action = na.omit) # AEOLU 5
+acf(df_residuals[,10], lag.max = 350, na.action = na.omit) # CSPAR 1
+acf(df_residuals[,11], lag.max = 350, na.action = na.omit) # CSPAR 2
+acf(df_residuals[,12], lag.max = 350, na.action = na.omit) # CSPAR 3
+acf(df_residuals[,13], lag.max = 350, na.action = na.omit) # CSPAR 4
+acf(df_residuals[,14], lag.max = 350, na.action = na.omit) # CSPAR 5
+acf(df_residuals[,15], lag.max = 350, na.action = na.omit) # WESTR 1
+acf(df_residuals[,16], lag.max = 350, na.action = na.omit) # WESTR 2 
+acf(df_residuals[,17], lag.max = 350, na.action = na.omit) # WESTR 3
+acf(df_residuals[,18], lag.max = 350, na.action = na.omit) # WESTR 4
+acf(df_residuals[,19], lag.max = 350, na.action = na.omit) # WESTR 5
+
+```
+
+## Exploring circular variables
+
+```{r}
+# GAM with circular time variable
+circ_interactmod_centered = gam(spl_low_db ~ s(center_time, by = interaction(Site,Deploy))+ 
+                            (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id + Site*Deploy, data=spl_data)
+summary(circ_interactmod_centered)
+ggplot(spl_data, aes(x = center_time, y = spl_low_db))+ geom_point(alpha = .2)+
+  geom_line(aes(y = predict(circ_interactmod_centered)))+ facet_grid(Site~Deploy)
+
+
+# fit with lme too and look at residuals and subtract off daily cycle
+
+circ_interactmod <- lm(spl_low_db ~ center_time + (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id, 
+                       data=spl_data)
+summary(circ_interactmod)
+plot(circ_interactmod)
+ggplot(spl_data, aes(x = center_time, y = spl_low_db))+ geom_point()+
+  geom_line(aes(y = predict(circ_interactmod)))+facet_grid(Site~Deploy)
+
+
+circ_interactmod_coAR <- gls(spl_low_db ~ center_time+ (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id,
+                        correlation = corCAR1(form = ~center_time|id), data=spl_data)
+summary(circ_interactmod_coAR)
+
+# Evaluating remaining autocorrelation after accounting for daily pattern
+df_residuals_circ = data.frame(filecount = filecount, ID = spl_data$id, residuals = residuals(circ_interactmod)) %>%
+  spread(ID,residuals,fill = NA)
+par(mfrow=c(4,5))
+acf(df_residuals_circ[,2], lag.max = 350, na.action = na.omit) # 210 1
+acf(df_residuals_circ[,3], lag.max = 350, na.action = na.omit) # 210 2
+acf(df_residuals_circ[,4], lag.max = 350, na.action = na.omit) # 210 3 
+acf(df_residuals_circ[,5], lag.max = 350, na.action = na.omit) # 210 4
+acf(df_residuals_circ[,6], lag.max = 350, na.action = na.omit) # 210 5 
+plot(x = 10, y = 20)
+plot(x = 10, y = 20)
+acf(df_residuals_circ[,7], lag.max = 350, na.action = na.omit) # AEOLU 3
+acf(df_residuals_circ[,8], lag.max = 350, na.action = na.omit) # AEOLU 4
+acf(df_residuals_circ[,9], lag.max = 350, na.action = na.omit) # AEOLU 5
+acf(df_residuals_circ[,10], lag.max = 350, na.action = na.omit) # CSPAR 1
+acf(df_residuals_circ[,11], lag.max = 350, na.action = na.omit) # CSPAR 2
+acf(df_residuals_circ[,12], lag.max = 350, na.action = na.omit) # CSPAR 3
+acf(df_residuals_circ[,13], lag.max = 350, na.action = na.omit) # CSPAR 4
+acf(df_residuals_circ[,14], lag.max = 350, na.action = na.omit) # CSPAR 5
+acf(df_residuals_circ[,15], lag.max = 350, na.action = na.omit) # WESTR 1
+acf(df_residuals_circ[,16], lag.max = 350, na.action = na.omit) # WESTR 2 
+acf(df_residuals_circ[,17], lag.max = 350, na.action = na.omit) # WESTR 3
+acf(df_residuals_circ[,18], lag.max = 350, na.action = na.omit) # WESTR 4
+acf(df_residuals_circ[,19], lag.max = 350, na.action = na.omit) # WESTR 5
+
+
+
+```
+
+
