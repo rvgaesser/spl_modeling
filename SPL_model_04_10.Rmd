@@ -202,3 +202,15 @@ acf(df_residuals_circ[,19], lag.max = 350, na.action = na.omit) # WESTR 5
 ```
 
 
+Using a GAM with a cyclic cubic basis to fit diurnal cycle.  This model accounts for variation among deployment in diurnal cycle and difference in site, deployment and day within deployment in the mean sound levels.  Note there is also a commented out model with a now correct smooth of `center_time` by each site by deployment interaction which would account for trends across the entire time. 
+
+
+
+```{r}
+cyclic_gam = gam(spl_low_db ~ s(hrmn_edt, bs="cc", k=96,by = Deploy)+ Deploy/factor(day) + Site*Deploy, data=spl_data)
+#cyclic_gam = gam(spl_low_db ~ s(hrmn_edt, bs="cc", k=96,by = Deploy)+ s(center_time, by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
+ggplot(spl_data, aes(x = center_time, y = spl_low_db))+ geom_point()+
+  geom_line(aes(y = predict(cyclic_gam)))+facet_grid(Site~Deploy)
+
+```
+
