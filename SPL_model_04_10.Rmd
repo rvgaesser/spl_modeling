@@ -18,7 +18,6 @@ library(dplyr)
 library(mgcv)
 library(nlme)
 library(tidyr)
-library(circular)
 ```
 
 ## Read in and prepare data
@@ -75,24 +74,24 @@ summary(test_gam2)
 # The goal is to describe the daily pattern in SPL and evaluate how it varies across site and season
 
 ## Fit gams that vary in their complexity of both smoothing effects and additive effects
-spl_gam1 <- gam(spl_low_db ~ s(hrmn_edt)+ Site*Deploy, data=spl_data)
-spl_gam2 <- gam(spl_low_db ~ s(hrmn_edt, by = Deploy) + Site*Deploy, data=spl_data)
+#spl_gam1 <- gam(spl_low_db ~ s(hrmn_edt)+ Site*Deploy, data=spl_data)
+#spl_gam2 <- gam(spl_low_db ~ s(hrmn_edt, by = Deploy) + Site*Deploy, data=spl_data)
 full_addmod <- gam(spl_low_db ~ s(hrmn_edt, by = interaction(Site,Deploy)) + Site+Deploy, data=spl_data)
 full_interactmod <- gam(spl_low_db ~ s(hrmn_edt, by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
 cont_interactmod <- gam(spl_low_db ~ s(matdays, by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
-circ_interactmod <- gam(spl_low_db ~ s(sin((2*pi*matdays)/24) + cos((2*pi*matdays)/24), 
-                                       by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
+#circ_interactmod <- gam(spl_low_db ~ s(sin((2*pi*matdays)/24) + cos((2*pi*matdays)/24), 
+#                                       by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
 
 
 ## Test for differences among nested models.
-anova(full_interactmod, full_addmod, test="Chisq")
-AIC(full_interactmod, full_addmod)
+#anova(full_interactmod, full_addmod, test="Chisq")
+#AIC(full_interactmod, full_addmod)
 ## ANOVA suggests that we keep the most complicated model
 ## The p-values are highly suspect given the likely temporal autocorrelation
 
 summary(full_interactmod)
 summary(cont_interactmod)
-summary(circ_interactmod)
+#summary(circ_interactmod)
 
 
 ## Using ggplot for quick gam visualization
@@ -110,7 +109,6 @@ ggplot(spl_data, aes(x=matdays, y = spl_low_db))+ geom_point(alpha = .2)+
 ## Visualize and model Autocorrelation structure
 
 ```{r}
-
 ## Attempting acf on each site/deploy following convo with james
 filecount = as.vector(c(1:672,1:576,1:768,1:576,1:672,
                         1:672,1:768,1:768,1:672,1:672,
@@ -152,17 +150,16 @@ acf(df_residuals[,19], lag.max = 350, na.action = na.omit) # WESTR 5
 ```{r}
 # GAM with circular time variable
 circ_interactmod_centered = gam(spl_low_db ~ s(center_time, by = interaction(Site,Deploy))+ 
-                            (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id + Site*Deploy, data=spl_data)
+                            (sin(2*pi*center_time/.5) + cos(2*pi*center_time/.5))*id + Site*Deploy, data=spl_data)
 summary(circ_interactmod_centered)
 ggplot(spl_data, aes(x = center_time, y = spl_low_db))+ geom_point(alpha = .2)+
   geom_line(aes(y = predict(circ_interactmod_centered)))+ facet_grid(Site~Deploy)
 
-
 # fit with lme too and look at residuals and subtract off daily cycle
-
 circ_interactmod <- lm(spl_low_db ~ center_time + (sin(2*pi*center_time/24) + cos(2*pi*center_time/24))*id, 
                        data=spl_data)
 summary(circ_interactmod)
+dev.off()
 plot(circ_interactmod)
 ggplot(spl_data, aes(x = center_time, y = spl_low_db))+ geom_point()+
   geom_line(aes(y = predict(circ_interactmod)))+facet_grid(Site~Deploy)
@@ -173,7 +170,8 @@ circ_interactmod_coAR <- gls(spl_low_db ~ center_time+ (sin(2*pi*center_time/24)
 summary(circ_interactmod_coAR)
 
 # Evaluating remaining autocorrelation after accounting for daily pattern
-df_residuals_circ = data.frame(filecount = filecount, ID = spl_data$id, residuals = residuals(circ_interactmod)) %>%
+df_residuals_circ = data.frame(filecount = filecount, ID = spl_data$id, 
+                               residuals = residuals(circ_interactmod_coAR)) %>%
   spread(ID,residuals,fill = NA)
 par(mfrow=c(4,5))
 acf(df_residuals_circ[,2], lag.max = 350, na.action = na.omit) # 210 1
@@ -198,6 +196,13 @@ acf(df_residuals_circ[,18], lag.max = 350, na.action = na.omit) # WESTR 4
 acf(df_residuals_circ[,19], lag.max = 350, na.action = na.omit) # WESTR 5
 
 
+```
+
+## After meeting 04/19/2019
+
+```{r}
+mod1 = gam(spl_low_db ~ )
+## getting code from james for gam with circular cubic spline
 
 ```
 
