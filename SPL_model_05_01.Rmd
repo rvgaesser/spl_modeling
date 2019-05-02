@@ -32,6 +32,9 @@ Deploy = Possible values 1:5, 1 = Nov '15, 2 = Jan '16, 3 = Apr '16, 4 = June '1
 This only includes the low frequency data(fish sounds), I will likely do the same thing for the high frequency data (invertebrate sounds)
 
 ```{r echo=FALSE}
+# The goal is to describe the daily pattern in SPL and evaluate how it varies across site and season
+
+
 spl_data = read.csv('SPL_all_data.csv', header = TRUE)
 spl_data = mutate(spl_data, Site = case_when(site == 1 ~ "210RK", site == 2 ~ "WESTR",
                                            site == 3 ~ "CSPAR", site == 4 ~ "AEOLU"),
@@ -68,86 +71,6 @@ summary(test_gam2)
 
 ```
 
-## Early gams 
-Exploring smooths by time of day and interaction between site and deploy, 
-with increasing number of fixed effects
-
-```{r}
-# The goal is to describe the daily pattern in SPL and evaluate how it varies across site and season
-
-## Fit gams that vary in their complexity of both smoothing effects and additive effects
-#spl_gam1 <- gam(spl_low_db ~ s(hrmn_edt)+ Site*Deploy, data=spl_data)
-#spl_gam2 <- gam(spl_low_db ~ s(hrmn_edt, by = Deploy) + Site*Deploy, data=spl_data)
-#full_addmod <- gam(spl_low_db ~ s(hrmn_edt, by = interaction(Site,Deploy)) + Site+Deploy, data=spl_data)
-#full_interactmod <- gam(spl_low_db ~ s(hrmn_edt, by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
-cont_interactmod <- gam(spl_low_db ~ s(matdays, by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
-#circ_interactmod <- gam(spl_low_db ~ s(sin((2*pi*matdays)/24) + cos((2*pi*matdays)/24), 
-#                                       by = interaction(Site,Deploy)) + Site*Deploy, data=spl_data)
-
-
-## Test for differences among nested models.
-#anova(full_interactmod, full_addmod, test="Chisq")
-#AIC(full_interactmod, full_addmod)
-## ANOVA suggests that we keep the most complicated model
-## The p-values are highly suspect given the likely temporal autocorrelation
-
-#summary(full_interactmod)
-summary(cont_interactmod)
-#summary(circ_interactmod)
-
-
-## Using ggplot for quick gam visualization
-#ggplot(spl_data, aes(x=hrmn_edt, y=spl_low_db))+ 
-#  geom_point(alpha = .2)+
-#  geom_smooth(method="gam", formula= y~s(x))+ facet_grid(Site~Deploy)
-
-#ggplot(spl_data, aes(x = hrmn_edt, y = spl_low_db))+ geom_point(alpha = .2)+
-#  geom_line(aes(y = predict(full_interactmod)))+ facet_grid(Site~Deploy)
-#ggplot(spl_data, aes(x=matdays, y = spl_low_db))+ geom_point(alpha = .2)+
-#  geom_line(aes(y = predict(cont_interactmod)))+ facet_grid(Site~Deploy, scales = "free_x")
-
-```
-
-## Visualize and model Autocorrelation structure
-Using mdoel with continuous time through deployment and Site*Deploy as fixed effect
-
-```{r}
-## Attempting acf on each site/deploy following convo with james
-filecount = as.vector(c(1:672,1:576,1:768,1:576,1:576,
-                        1:672,1:768,1:768,1:672,1:672,
-                        1:672,1:864,1:768,1:672,1:672,
-                        1:768,1:672,1:672))
-df_residuals = data.frame(filecount = filecount, ID = spl_data$id, residuals = residuals(cont_interactmod)) %>%
-  spread(ID,residuals,fill = NA)
-
-#acf_obj = apply(df_residuals[,-1],2,acf, na.action = na.omit)
-#df <- data.frame(matrix(unlist(acf_obj), nrow=length(acf_obj), byrow=T))
-#test = do.call(rbind,acf_obj)
-
-par(mfrow=c(4,5))
-acf(df_residuals[,2], lag.max = 350, na.action = na.omit) # 210 1
-acf(df_residuals[,3], lag.max = 350, na.action = na.omit) # 210 2
-acf(df_residuals[,4], lag.max = 350, na.action = na.omit) # 210 3 
-acf(df_residuals[,5], lag.max = 350, na.action = na.omit) # 210 4
-acf(df_residuals[,6], lag.max = 350, na.action = na.omit) # 210 5 
-plot(x = 10, y = 20)
-plot(x = 10, y = 20)
-acf(df_residuals[,7], lag.max = 350, na.action = na.omit) # AEOLU 3
-acf(df_residuals[,8], lag.max = 350, na.action = na.omit) # AEOLU 4
-acf(df_residuals[,9], lag.max = 350, na.action = na.omit) # AEOLU 5
-acf(df_residuals[,10], lag.max = 350, na.action = na.omit) # CSPAR 1
-acf(df_residuals[,11], lag.max = 350, na.action = na.omit) # CSPAR 2
-acf(df_residuals[,12], lag.max = 350, na.action = na.omit) # CSPAR 3
-acf(df_residuals[,13], lag.max = 350, na.action = na.omit) # CSPAR 4
-acf(df_residuals[,14], lag.max = 350, na.action = na.omit) # CSPAR 5
-acf(df_residuals[,15], lag.max = 350, na.action = na.omit) # WESTR 1
-acf(df_residuals[,16], lag.max = 350, na.action = na.omit) # WESTR 2 
-acf(df_residuals[,17], lag.max = 350, na.action = na.omit) # WESTR 3
-acf(df_residuals[,18], lag.max = 350, na.action = na.omit) # WESTR 4
-acf(df_residuals[,19], lag.max = 350, na.action = na.omit) # WESTR 5
-
-```
-
 
 ## After meeting 04/19/2019
 
@@ -164,7 +87,7 @@ full_cc_gam2 = gam(spl_low_db ~ s(hrmn_edt, bs="cc", k=24,by = Deploy)+ factor(d
                     Site*Deploy, data=spl_data)
 full_cc_gam3 = gam(spl_low_db ~ s(hrmn_edt, bs="cc", k=12,by = Deploy)+ factor(date)+
                     id, data=spl_data)
-
+gam.check(full_cc_gam3)
 
 #Simplest model - R-sq only .11
 cyclic_gamm = gamm(spl_low_db ~ s(hrmn_edt, bs = "cc", k=96, by = Deploy), data = spl_data)
@@ -179,12 +102,17 @@ cyclic_gamm3 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=24,by = Deploy)+ factor(
                     data=spl_data, control = list(niterEM=0, optimMethod="L-BFGS-B"))
 cyclic_gamm4 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=12,by = Deploy)+ factor(date) + Site,
                     data=spl_data, control = list(niterEM=0, optimMethod="L-BFGS-B"))
+# Singularity error
 #cyclic_gamm5 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=12,by = Deploy)+ factor(date) + id,
 #                    data=spl_data, control = list(niterEM=0, optimMethod="L-BFGS-B"))
-# Singularity error
+
+gam.check(cyclic_gamm4$gam)
+par(mfrow = c(3,2))
+plot(cyclic_gamm4$gam)
 
 anova(cyclic_gamm1$lme,cyclic_gamm2$lme,cyclic_gamm3$lme,cyclic_gamm4$lme)
-
+# The gam with the highest k has the highest edf, but the lowest AIC (cyclic_gamm1)
+# GAM with lowest k has lowest edf, but highest AIC
 
 cyclic_gamm5 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=12,by = interaction(Site,Deploy))+ factor(date), 
                     data=spl_data, control = list(niterEM=0, optimMethod="L-BFGS-B"))
@@ -192,8 +120,14 @@ cyclic_gamm6 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=12,by = interaction(Site
                     data=spl_data, control = list(niterEM=0, optimMethod="L-BFGS-B"))
 cyclic_gamm7 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=12,by = interaction(Site,Deploy))+ Site, 
                     data=spl_data, control = list(niterEM=0, optimMethod="L-BFGS-B"))
+
 anova(cyclic_gamm5$lme,cyclic_gamm6$lme,cyclic_gamm7$lme)
 # Based on anova results, cyclic_gamm6 has the lowest AIC and is selected for evaluating correlation structure 
+
+anova(cyclic_gamm6$lme, cyclic_gamm4$lme)
+summary(cyclic_gamm6$gam)
+summary(cyclic_gamm4$gam)
+# gamm6 has a lower AIC and a higher R-sq, continuing with that model
 
 
 ### Model errors with a singularity if Site*Deploy is included as a fixed effect
@@ -210,16 +144,25 @@ anova(cyclic_gamm5$lme,cyclic_gamm6$lme,cyclic_gamm7$lme)
 
 ```{r}
 summary(cyclic_gamm6$gam)
+par(mfrow = c(5,4))
 plot(cyclic_gamm6$gam)
 gam.check(cyclic_gamm6$gam)
 
-# Gam check suggests 10 knots is appropriate
-cyclic_gammk10 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=10,by = interaction(Site,Deploy))+ factor(date) + Site,
+## Tried with k= 10 due to gam check results, but AIC increases - continuing with gamm6
+cyclic_gammk10 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=8,by = interaction(Site,Deploy))+ factor(date) + Site,
                     data=spl_data, control = list(niterEM=0, optimMethod="L-BFGS-B"))
-gam.check(cyclic_gamm6$gam)
+gam.check(cyclic_gammk10$gam)
 plot(cyclic_gamm6$gam)
+
+AIC(cyclic_gamm6,cyclic_gammk10)
+anova(cyclic_gamm6$lme,cyclic_gammk10$lme)
 
 # Exploring residuals and autocorrelation
+filecount = as.vector(c(1:672,1:576,1:768,1:576,1:576,
+                        1:672,1:768,1:768,1:672,1:672,
+                        1:672,1:864,1:768,1:672,1:672,
+                        1:768,1:672,1:672))
+
 df_residuals = data.frame(filecount = filecount, ID = spl_data$id, residuals = residuals(cyclic_gamm6$lme)) %>%
   spread(ID,residuals,fill = NA)
 par(mfrow=c(4,5))
@@ -248,7 +191,8 @@ acf(df_residuals[,19], lag.max = 50, na.action = na.omit) # WESTR 5
 ## Correlation structure
 
 ```{r}
-ctrl <- list(niterEM = 0, msVerbose = TRUE, optimMethod="L-BFGS-B")
+#ctrl <- list(niterEM = 0, msVerbose = TRUE, optimMethod="L-BFGS-B")
+ctrl = list(niterEM = 0, optimMethod="L-BFGS-B")
 
 gamm6_AR = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=12,by = interaction(Site,Deploy))+ factor(date) + Site,
                     data=spl_data, correlation = corARMA(form = ~ 1|id, p = 1), control = ctrl)
@@ -280,6 +224,75 @@ acf(df_residuals[,17], lag.max = 50, na.action = na.omit) # WESTR 3
 acf(df_residuals[,18], lag.max = 50, na.action = na.omit) # WESTR 4
 acf(df_residuals[,19], lag.max = 50, na.action = na.omit) # WESTR 5
 
+
+gamm6_AR2 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=12,by = interaction(Site,Deploy))+ factor(date) + Site,
+                    data=spl_data, correlation = corARMA(form = ~ 1|id, p = 2), control = ctrl)
+anova(gamm6_AR2$lme, gamm6_AR$lme, cyclic_gamm6$lme)
+plot(gamm6_AR2$gam)
+gam.check(gamm6_AR2$gam)
+
+gamm6_AR2_k24 = gamm(spl_low_db ~ s(hrmn_edt, bs="cc", k=24,by = interaction(Site,Deploy))+ factor(date) + Site,
+                    data=spl_data, correlation = corARMA(form = ~ 1|id, p = 2), control = ctrl)
+anova(gamm6_AR2$lme, gamm6_AR$lme, cyclic_gamm6$lme)
+
+## gamm6_AR2 has the lowest AIC, but gam_check suggests that the k is too low. 
+## Do I fit the AR2 structure to the model with a higher k? - this will take >4 hourss
+
+df_residuals = data.frame(filecount = filecount, ID = spl_data$id, residuals = residuals(gamm6_AR2$lme)) %>%
+  spread(ID,residuals,fill = NA)
+par(mfrow=c(4,5))
+acf(df_residuals[,2], lag.max = 50, na.action = na.omit) # 210 1
+acf(df_residuals[,3], lag.max = 50, na.action = na.omit) # 210 2
+acf(df_residuals[,4], lag.max = 50, na.action = na.omit) # 210 3 
+acf(df_residuals[,5], lag.max = 50, na.action = na.omit) # 210 4
+acf(df_residuals[,6], lag.max = 50, na.action = na.omit) # 210 5 
+plot(x = 10, y = 20)
+plot(x = 10, y = 20)
+acf(df_residuals[,7], lag.max = 50, na.action = na.omit) # AEOLU 3
+acf(df_residuals[,8], lag.max = 50, na.action = na.omit) # AEOLU 4
+acf(df_residuals[,9], lag.max = 50, na.action = na.omit) # AEOLU 5
+acf(df_residuals[,10], lag.max = 50, na.action = na.omit) # CSPAR 1
+acf(df_residuals[,11], lag.max = 50, na.action = na.omit) # CSPAR 2
+acf(df_residuals[,12], lag.max = 50, na.action = na.omit) # CSPAR 3
+acf(df_residuals[,13], lag.max = 50, na.action = na.omit) # CSPAR 4
+acf(df_residuals[,14], lag.max = 50, na.action = na.omit) # CSPAR 5
+acf(df_residuals[,15], lag.max = 50, na.action = na.omit) # WESTR 1
+acf(df_residuals[,16], lag.max = 50, na.action = na.omit) # WESTR 2 
+acf(df_residuals[,17], lag.max = 50, na.action = na.omit) # WESTR 3
+acf(df_residuals[,18], lag.max = 50, na.action = na.omit) # WESTR 4
+acf(df_residuals[,19], lag.max = 50, na.action = na.omit) # WESTR 5
+
+
+```
+
+## Extracting Model terms 
+
+```{r}
+want <- seq(1, nrow(spl_data), length.out =3600)
+pdat <- with(spl_data, data.frame(hrmn_edt = hrmn_edt[want], Site = Site[want],
+                                  Deploy = Deploy[want], date = date[want]))
+ 
+## predict trend contributions
+p  <- predict(cyclic_gamm6$gam, newdata = pdat, type = "terms", se.fit = TRUE)
+p1 <- predict(cyclic_gamm4$gam, newdata = pdat, type = "terms", se.fit = TRUE)
+
+ 
+## combine with the predictions data, including fitted and SEs
+pdat <- transform(pdat,
+                 p  = p$fit[,2],  se  = p$se.fit[,2],
+                 p1 = p1$fit[,2], se1 = p1$se.fit[,2])
+
+
+op <- par(mar = c(5,4,2,2) + 0.1)
+ylim <- with(pdat, range(p, p1))
+ylim[1] <- floor(ylim[1])
+ylim[2] <- ceiling(ylim[2])
+ylab <- "Low Frequency SPL"
+plot(spl_low_db- mean(spl_low_db) ~ hrmn_edt, data = spl_data, type = "n",
+     ylab = ylab, ylim = ylim)
+lines(p  ~ hrmn_edt, data = pdat, col = "black")
+lines(p1 ~ hrmn_edt, data = pdat, col = "red")
+par(op)
 
 ```
 
